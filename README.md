@@ -81,85 +81,99 @@ This is how the shell extension is deployed to end users as part of the OpenRock
 
 ### 1. Add the shell extension files to the installer
 
-In your install4j project, add a **file set** or include the following files from the build output:
+Go to **Files** → **Define Distribution Tree** in the install4j sidebar. Click the **+** button to add files and directories. In the wizard:
 
-```
-OrkThumbnailHandler.dll
-SharpShell.dll
-```
+1. Select the `Windows_resources directory` which contains `OrkThumbnailHandler.dll` and `SharpShell.dll`.
+2. Choose **"Add to subdirectory"** and enter `shell-extension`.
+3. Click **Finish**.
 
-Set the destination to a subdirectory of the installation directory, e.g.:
+This places the DLLs at `${installer:sys.installationDir}\shell-extension\` on the user's machine.
 
-```
-${installer:sys.installationDir}/shell-extension/
-```
+### 2. Add a user opt-out checkbox
 
-### 2. Register on install
+The thumbnail handler is enabled by default, but users can opt out during installation. To add this:
 
-Add a **"Run PowerShell script"** action in your **Install** action sequence, **after** file extraction:
+1. In **Screens & Actions**, find the **"Additional confirmations"** screen under the **Installer** node (or whichever screen you want the checkbox on).
+2. Select the screen and add a **form component** of type **"Check box"** to it.
+3. Configure the checkbox:
 
-```powershell
-$regasm = "$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe"
-$dll = "${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll"
+| Property                       | Value |
+|--------------------------------|-------|
+| Check box > Text               | `Register Windows Explorer thumbnail previews for .ork files` |
+| User input > Variable name     | `installThumbnailHandler` |
+| Check box > Initially selected | Yes |
 
-if (Test-Path $regasm) {
-    & $regasm /codebase $dll 2>&1
-}
-```
+This creates an install4j variable `${installer:installThumbnailHandler}` that is `"true"` or `"false"` at runtime.
 
-Action settings:
-- **Run as:** Administrator (the installer should already be elevated)
-- **Failure strategy:** Report warning and continue — the installer should succeed even if registration fails (e.g. on a non-standard Windows installation)
-- **Execute on:** Install only (not on update — see below)
+### 3. Add actions to the Installer
 
-### 3. Unregister on uninstall
+Go to **Installer** → **Screens & Actions** in the sidebar. Expand the **Installer** node. You need to add two **"Run executable or batch file"** actions at the **end** of the action list (after the existing screens/actions that install files). Click the **+** button on the right to add each one, and search for **"Run executable or batch file"**.
 
-Add a **"Run PowerShell script"** action **early** in the **Uninstall** action sequence, **before** file deletion:
+> **Important:** install4j's "Run script" action executes Java, not PowerShell. Use **"Run executable or batch file"** actions that call `powershell.exe` instead.
 
-```powershell
-$regasm = "$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe"
-$dll = "${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll"
+**Action 1 — Register the shell extension:**
 
-if ((Test-Path $regasm) -and (Test-Path $dll)) {
-    & $regasm /unregister $dll 2>&1
-}
-```
+Add a **"Run executable or batch file"** action with these properties:
 
-### 4. Re-register on update
+| Property | Value |
+|----------|-------|
+| Executable | `powershell.exe` |
+| Arguments | `-NoProfile -ExecutionPolicy Bypass -Command "& '$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe' /codebase '${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll'"` |
+| Wait for termination | Yes |
+| Failure strategy | Continue on failure |
+| Condition expression | `${installer:installThumbnailHandler}` |
 
-When the user updates OpenRocket, the DLL may have changed. Add a **"Run PowerShell script"** action in the **Update** sequence that re-registers:
+**Action 2 — Notify the shell:**
 
-```powershell
-$regasm = "$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe"
-$dll = "${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll"
+Add another **"Run executable or batch file"** action immediately after:
 
-if (Test-Path $regasm) {
-    & $regasm /codebase $dll 2>&1
-}
-```
+| Property | Value |
+|----------|-------|
+| Executable | `powershell.exe` |
+| Arguments | `-NoProfile -ExecutionPolicy Bypass -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Shell { [DllImport(\"shell32.dll\")] public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2); }'; [Shell]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)"` |
+| Wait for termination | Yes |
+| Failure strategy | Continue on failure |
+| Condition expression | `${installer:installThumbnailHandler}` |
 
-### 5. Notify the shell
+This tells Explorer to reload its shell extensions without disrupting the user's open windows.
 
-After registration (or unregistration), add a **"Run PowerShell script"** action to notify Explorer that file associations have changed. This is a gentler alternative to killing and restarting Explorer — it tells the shell to reload its extension cache without disrupting the user's open windows.
+### 4. Add actions to the Uninstaller
 
-```powershell
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class Shell {
-    [DllImport("shell32.dll")]
-    public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
-}
-"@
+Still in **Screens & Actions**, expand the **Uninstaller** node. Add two actions at the **beginning** of the action list — they must run **before** the action that deletes files (otherwise the DLL is gone before it can be unregistered).
 
-# SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0x0000
-[Shell]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
-```
+The uninstaller actions do **not** need a condition expression — if the DLL is present, it should always be unregistered on uninstall regardless of the original checkbox choice.
+
+**Action 1 — Unregister the shell extension:**
+
+Add a **"Run executable or batch file"** action:
+
+| Property | Value |
+|----------|-------|
+| Executable | `powershell.exe` |
+| Arguments | `-NoProfile -ExecutionPolicy Bypass -Command "& '$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe' /unregister '${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll'"` |
+| Wait for termination | Yes |
+| Failure strategy | Continue on failure |
+
+**Action 2 — Notify the shell:**
+
+Add the same shell notification action from step 3 immediately after (without the condition expression).
+
+### 5. Updates
+
+If your installer handles updates by running the installer again (which is the default install4j behavior), the registration actions from step 3 will re-run automatically. The checkbox will be shown again, so the user can change their preference on update.
+
+### Action order summary
+
+| Node | Action order | Conditioned on checkbox? |
+|------|-------------|--------------------------|
+| **Installer** | *(existing screens/actions)* → Register → Notify shell | Yes |
+| **Uninstaller** | Unregister → Notify shell → *(existing screens/actions)* | No (always runs) |
 
 ### install4j notes
 
 - **64-bit only:** The handler DLL must be registered with the 64-bit regasm (`Framework64`). Explorer on 64-bit Windows is a 64-bit process and will not load 32-bit shell extensions.
 - **Don't move the DLL after registration:** `regasm /codebase` embeds the DLL's absolute path in the registry. This is fine for installers since the install directory is stable.
+- **`${installer:sys.installationDir}` in scripts:** This is an install4j variable that resolves to the actual install path at runtime. Make sure the `shell-extension\` subfolder name in the scripts matches what you created in step 1.
 - **Silent installs:** The PowerShell scripts work fine in silent/unattended mode. No user interaction is needed.
 - **Rollback:** If registration fails during install, OpenRocket itself still works — the user just won't get thumbnails. Log the failure but don't fail the install.
 
@@ -178,7 +192,3 @@ public class Shell {
 
 **Build fails with "SharpShell could not be found":**
 - Run `msbuild OrkThumbnailHandler.csproj /t:Restore` before building to restore the NuGet package.
-
-## License
-
-MIT
