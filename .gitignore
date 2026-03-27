@@ -1,0 +1,19 @@
+# Build outputs
+bin/
+obj/
+*.user
+*.suo
+*.cache
+
+# NuGet
+packages/
+*.nupkg
+
+# Visual Studio
+.vs/
+*.sln.docstates
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
