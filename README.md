@@ -103,60 +103,55 @@ The thumbnail handler is enabled by default, but users can opt out during instal
 | User input > Variable name     | `installThumbnailHandler` |
 | Check box > Initially selected | Yes |
 
-This creates an install4j variable `${installer:installThumbnailHandler}` that is `"true"` or `"false"` at runtime.
+This creates an install4j variable `installThumbnailHandler` that is `true` or `false` at runtime. The condition expression on the registration actions references this variable to decide whether to run.
 
 ### 3. Add actions to the Installer
 
-Go to **Installer** → **Screens & Actions** in the sidebar. Expand the **Installer** node. You need to add two **"Run executable or batch file"** actions at the **end** of the action list (after the existing screens/actions that install files). Click the **+** button on the right to add each one, and search for **"Run executable or batch file"**.
+Go to **Installer** → **Screens & Actions** in the sidebar. Expand the **Installer** node. You need to add one 
+**"Run executable or batch file"** action at the **end** of the action list (after the existing screens/actions that install files). 
+Click the **+** button on the right to add each one, and search for **"Run executable or batch file"**.
 
-> **Important:** install4j's "Run script" action executes Java, not PowerShell. Use **"Run executable or batch file"** actions that call `powershell.exe` instead.
+> **Important:** install4j's "Run script" action executes Java, not PowerShell. Use **"Run executable or batch file"** actions instead.
 
-**Action 1 — Register the shell extension:**
+**Action — Register the shell extension:**
 
 Add a **"Run executable or batch file"** action with these properties:
 
 | Property | Value |
 |----------|-------|
-| Executable | `powershell.exe` |
-| Arguments | `-NoProfile -ExecutionPolicy Bypass -Command "& '$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe' /codebase '${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll'"` |
+| Executable | `${installer:sys.windowsDir}\Microsoft.NET\Framework64\v4.0.30319\regasm.exe` |
+| Arguments (element 0) | `/codebase` |
+| Arguments (element 1) | `${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll` |
+| Working directory | `${installer:sys.installationDir}\shell-extension` |
 | Wait for termination | Yes |
+| Action elevation type | Elevate to administrator privileges |
 | Failure strategy | Continue on failure |
-| Condition expression | `${installer:installThumbnailHandler}` |
+| Error message | `Failed to register the .ork thumbnail preview handler. Explorer thumbnails for .ork files may not be available. OpenRocket will still work normally.` |
+| Condition expression | `return ((Boolean)context.getVariable("installThumbnailHandler")).booleanValue();` |
 
-**Action 2 — Notify the shell:**
-
-Add another **"Run executable or batch file"** action immediately after:
-
-| Property | Value |
-|----------|-------|
-| Executable | `powershell.exe` |
-| Arguments | `-NoProfile -ExecutionPolicy Bypass -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Shell { [DllImport(\"shell32.dll\")] public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2); }'; [Shell]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)"` |
-| Wait for termination | Yes |
-| Failure strategy | Continue on failure |
-| Condition expression | `${installer:installThumbnailHandler}` |
-
-This tells Explorer to reload its shell extensions without disrupting the user's open windows.
+> **Note on arguments:** In the install4j UI, the Arguments field is an array. Click the **+** button in the arguments list to add each element separately. Do **not** put both `/codebase` and the path in a single element — splitting them ensures install4j handles paths with spaces correctly.
 
 ### 4. Add actions to the Uninstaller
 
-Still in **Screens & Actions**, expand the **Uninstaller** node. Add two actions at the **beginning** of the action list — they must run **before** the action that deletes files (otherwise the DLL is gone before it can be unregistered).
+Still in **Screens & Actions**, expand the **Uninstaller** node. Add one action at the **beginning** of the action 
+list — they must run **before** the action that deletes files (otherwise the DLL is gone before it can be unregistered).
 
-The uninstaller actions do **not** need a condition expression — if the DLL is present, it should always be unregistered on uninstall regardless of the original checkbox choice.
+The uninstaller action does **not** need a condition expression — if the DLL is present, it should always be unregistered on uninstall regardless of the original checkbox choice.
 
-**Action 1 — Unregister the shell extension:**
+**Action — Unregister the shell extension:**
 
 Add a **"Run executable or batch file"** action:
 
 | Property | Value |
 |----------|-------|
-| Executable | `powershell.exe` |
-| Arguments | `-NoProfile -ExecutionPolicy Bypass -Command "& '$env:windir\Microsoft.NET\Framework64\v4.0.30319\regasm.exe' /unregister '${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll'"` |
+| Executable | `${installer:sys.windowsDir}\Microsoft.NET\Framework64\v4.0.30319\regasm.exe` |
+| Arguments (element 0) | `/unregister` |
+| Arguments (element 1) | `${installer:sys.installationDir}\shell-extension\OrkThumbnailHandler.dll` |
+| Working directory | `${installer:sys.installationDir}\shell-extension` |
 | Wait for termination | Yes |
+| Action elevation type | Elevate to administrator privileges |
 | Failure strategy | Continue on failure |
-
-**Action 2 — Notify the shell:**
-
-Add the same shell notification action from step 3 immediately after (without the condition expression).
+| Error message | `Failed to unregister the .ork thumbnail preview handler.` |
 
 ### 5. Updates
 
@@ -166,8 +161,8 @@ If your installer handles updates by running the installer again (which is the d
 
 | Node | Action order | Conditioned on checkbox? |
 |------|-------------|--------------------------|
-| **Installer** | *(existing screens/actions)* → Register → Notify shell | Yes |
-| **Uninstaller** | Unregister → Notify shell → *(existing screens/actions)* | No (always runs) |
+| **Installer** | *(existing screens/actions)* → Register |
+| **Uninstaller** | Unregister → *(existing screens/actions)* | No (always runs) |
 
 ### install4j notes
 
