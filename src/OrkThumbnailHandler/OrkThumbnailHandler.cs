@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using SharpShell.Attributes;
 using SharpShell.SharpThumbnailHandler;
+using Microsoft.Win32;
 
 namespace OrkThumbnailHandler
 {
@@ -17,7 +18,7 @@ namespace OrkThumbnailHandler
     /// for display in Windows Explorer.
     /// </summary>
     [ComVisible(true)]
-    [COMServerAssociation(AssociationType.FileExtension, ".ork")]
+    [COMServerAssociation(AssociationType.ClassOfExtension, ".ork")]
     [DisplayName("OpenRocket Design Document Thumbnail Handler")]
     [Guid("D4E7F8A1-2B3C-4D5E-9F01-A2B3C4D5E6F7")]
     public class OrkThumbnailHandler : SharpThumbnailHandler
@@ -28,11 +29,16 @@ namespace OrkThumbnailHandler
         private const string PreviewEntryName = "preview.png";
 
         /// <summary>
-        /// Gets the thumbnail image for the given .ork file.
+        /// The Windows Registry key containing a path to OpenRocket's default icon.
         /// </summary>
-        /// <param name="width">The maximum width/height of the thumbnail requested by the shell.</param>
-        /// <returns>A Bitmap containing the thumbnail, or null if no preview is available.</returns>
-        protected override Bitmap GetThumbnailImage(uint width)
+        private const string IconRegistryKey = "HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes\\OpenRocket\\DefaultIcon";
+
+		/// <summary>
+		/// Gets the thumbnail image for the given .ork file.
+		/// </summary>
+		/// <param name="width">The maximum width/height of the thumbnail requested by the shell.</param>
+		/// <returns>A Bitmap containing the thumbnail, or null if no preview is available.</returns>
+		protected override Bitmap GetThumbnailImage(uint width)
         {
             try
             {
@@ -41,36 +47,50 @@ namespace OrkThumbnailHandler
                 using (var archive = new ZipArchive(SelectedItemStream, ZipArchiveMode.Read))
                 {
                     var entry = FindPreviewEntry(archive);
-                    if (entry == null)
+                    if (entry != null)
                     {
-                        LogError("No preview.png found in .ork archive.");
-                        return null;
-                    }
+                        using (var entryStream = entry.Open())
+                        using (var memoryStream = new MemoryStream())
+                        {
+                            // Copy to a MemoryStream first — ZipArchive streams don't
+                            // support seeking, which Bitmap's constructor may need.
+                            entryStream.CopyTo(memoryStream);
+                            memoryStream.Position = 0;
 
-                    using (var entryStream = entry.Open())
-                    using (var memoryStream = new MemoryStream())
-                    {
-                        // Copy to a MemoryStream first — ZipArchive streams don't
-                        // support seeking, which Bitmap's constructor may need.
-                        entryStream.CopyTo(memoryStream);
-                        memoryStream.Position = 0;
-
-                        var original = new Bitmap(memoryStream);
-                        return ScaleImage(original, (int)width);
+                            var original = new Bitmap(memoryStream);
+                            return ScaleImage(original, (int)width);
+                        }
                     }
                 }
             }
             catch (InvalidDataException ex)
             {
                 LogError($"File is not a valid ZIP archive: {ex.Message}");
-                return null;
             }
             catch (Exception ex)
             {
                 LogError($"Error extracting thumbnail: {ex.Message}");
-                return null;
             }
-        }
+
+			try
+			{
+                // Display the default OpenRocket icon instead
+				string iconPath = (string)Registry.GetValue(IconRegistryKey, "", null);
+				if (iconPath == null)
+				{
+					LogError("Failed to get the default icon.");
+					return null;
+				}
+
+				var defaultIcon = new Bitmap(iconPath);
+				return ScaleImage(defaultIcon, (int)width);
+			}
+			catch (Exception e)
+			{
+				LogError($"Unable to use the default icon: {e.Message}");
+				return null;
+			}
+		}
 
         /// <summary>
         /// Finds the preview image entry in the archive, using a case-insensitive search.
