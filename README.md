@@ -2,7 +2,7 @@
 
 A Windows shell extension that provides thumbnail previews for `.ork` (OpenRocket Design Document) files in Windows Explorer. Designed to be bundled with the OpenRocket installer via install4j.
 
-`.ork` files are ZIP archives containing a `preview.png` image. This extension extracts that image and displays it as the file's thumbnail in Explorer — in icon view, the Details pane, and file-open dialogs.
+`.ork` files are ZIP archives containing a `thumbnail.png` image (a small, simplified rendering of the rocket made for icons) and a larger `preview.png`. This extension extracts the thumbnail image and displays it as the file's thumbnail in Explorer — in icon view, the Details pane, and file-open dialogs.
 
 ![.NET Framework 4.8](https://img.shields.io/badge/.NET%20Framework-4.8-blue)
 ![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
@@ -11,7 +11,7 @@ A Windows shell extension that provides thumbnail previews for `.ork` (OpenRocke
 
 1. Windows Explorer encounters a `.ork` file and asks the registered thumbnail handler for an image.
 2. The handler opens the `.ork` file as a ZIP archive.
-3. It extracts `preview.png` from the root of the archive.
+3. It extracts `thumbnail.png` from the root of the archive, or `preview.png` for files saved by older OpenRocket versions that have no thumbnail.
 4. It returns the image as a bitmap, scaled to the requested thumbnail size.
 
 ## Project structure
@@ -180,7 +180,7 @@ If your installer handles updates by running the installer again (which is the d
 - Verify the DLL is in the location it was registered from — it must not have been moved.
 
 **Thumbnails show for some .ork files but not others:**
-- The file may not contain a `preview.png` at the ZIP root. The handler gracefully returns no thumbnail in that case.
+- The file may not contain a `thumbnail.png` or `preview.png` at the ZIP root. The handler gracefully returns no thumbnail in that case.
 
 **Build fails with "reference assemblies for .NETFramework,Version=v4.8 were not found":**
 - Install the [.NET Framework 4.8 Developer Pack](https://dotnet.microsoft.com/download/dotnet-framework/net48).

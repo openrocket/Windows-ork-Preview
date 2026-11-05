@@ -13,8 +13,10 @@ namespace OrkThumbnailHandler
     /// <summary>
     /// Provides thumbnail images for .ork (OpenRocket Design Document) files.
     /// 
-    /// .ork files are ZIP archives containing a preview.png image at the root.
-    /// This handler extracts that image and returns it as the file's thumbnail
+    /// .ork files are ZIP archives. OpenRocket stores a small, simplified rendering
+    /// of the rocket for file icons as thumbnail.png at the root, next to the larger
+    /// preview.png. This handler extracts thumbnail.png, or preview.png for files
+    /// saved by older OpenRocket versions, and returns it as the file's thumbnail
     /// for display in Windows Explorer.
     /// </summary>
     [ComVisible(true)]
@@ -24,9 +26,9 @@ namespace OrkThumbnailHandler
     public class OrkThumbnailHandler : SharpThumbnailHandler
     {
         /// <summary>
-        /// The path of the preview image inside the .ork ZIP archive.
+        /// The paths of the images inside the .ork ZIP archive, in order of preference.
         /// </summary>
-        private const string PreviewEntryName = "preview.png";
+        private static readonly string[] ImageEntryNames = { "thumbnail.png", "preview.png" };
 
         /// <summary>
         /// The Windows Registry key containing a path to OpenRocket's default icon.
@@ -46,7 +48,7 @@ namespace OrkThumbnailHandler
                 // that Explorer is asking us to thumbnail.
                 using (var archive = new ZipArchive(SelectedItemStream, ZipArchiveMode.Read))
                 {
-                    var entry = FindPreviewEntry(archive);
+                    var entry = FindImageEntry(archive);
                     if (entry != null)
                     {
                         using (var entryStream = entry.Open())
@@ -93,15 +95,19 @@ namespace OrkThumbnailHandler
 		}
 
         /// <summary>
-        /// Finds the preview image entry in the archive, using a case-insensitive search.
+        /// Finds the first image entry of <see cref="ImageEntryNames"/> that is present in the archive,
+        /// using a case-insensitive search.
         /// </summary>
-        private static ZipArchiveEntry FindPreviewEntry(ZipArchive archive)
+        private static ZipArchiveEntry FindImageEntry(ZipArchive archive)
         {
-            foreach (var entry in archive.Entries)
+            foreach (var name in ImageEntryNames)
             {
-                if (string.Equals(entry.FullName, PreviewEntryName, StringComparison.OrdinalIgnoreCase))
+                foreach (var entry in archive.Entries)
                 {
-                    return entry;
+                    if (string.Equals(entry.FullName, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return entry;
+                    }
                 }
             }
             return null;
