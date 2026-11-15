@@ -40,9 +40,12 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="OrkImages.cs" />
+    <Compile Include="OrkPreviewHandler.cs" />
     <Compile Include="OrkThumbnailHandler.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
