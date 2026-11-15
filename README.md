@@ -1,8 +1,8 @@
 # windows-ork-preview
 
-A Windows shell extension that provides thumbnail previews for `.ork` (OpenRocket Design Document) files in Windows Explorer. Designed to be bundled with the OpenRocket installer via install4j.
+A Windows shell extension that provides thumbnails and previews for `.ork` (OpenRocket Design Document) files in Windows Explorer. Designed to be bundled with the OpenRocket installer via install4j.
 
-`.ork` files are ZIP archives containing a `thumbnail.png` image (a small, simplified rendering of the rocket made for icons) and a larger `preview.png`. This extension extracts the thumbnail image and displays it as the file's thumbnail in Explorer — in icon view, the Details pane, and file-open dialogs.
+`.ork` files are ZIP archives containing a `thumbnail.png` image (a small, simplified rendering of the rocket made for icons) and a larger, detailed `preview.png`. The extension shows the thumbnail image as the file's thumbnail in Explorer (in icon views, the Details pane, and file-open dialogs) and the preview image in Explorer's preview pane.
 
 ![.NET Framework 4.8](https://img.shields.io/badge/.NET%20Framework-4.8-blue)
 ![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
@@ -15,6 +15,8 @@ A Windows shell extension that provides thumbnail previews for `.ork` (OpenRocke
 4. It returns the image as a bitmap, scaled to the requested thumbnail size.
 5. If the file contains neither image, or cannot be read, it returns the OpenRocket icon instead, which is embedded in the DLL.
 
+The preview pane uses a separate preview handler in the same DLL. It shows `preview.png`, falling back to `thumbnail.png` and then the OpenRocket icon, scaled down to fit the pane. It runs in Windows' shared preview host (`prevhost.exe`).
+
 ## Project structure
 
 ```
@@ -24,6 +26,8 @@ windows-ork-preview/
 │   └── OrkThumbnailHandler/
 │       ├── OrkThumbnailHandler.csproj
 │       ├── OrkThumbnailHandler.cs      # The thumbnail provider implementation
+│       ├── OrkPreviewHandler.cs        # The preview pane handler
+│       ├── OrkImages.cs                # Reads the images from .ork files, and the fallback icon
 │       ├── Resources/
 │       │   └── icon-*.png              # OpenRocket icon, shown for files without an image
 │       └── Properties/
@@ -181,6 +185,10 @@ If your installer handles updates by running the installer again (which is the d
 - Clear the thumbnail cache: run `cleanmgr` → select "Thumbnails" and clean.
 - Log off and back on, or restart Explorer.
 - Verify the DLL is in the location it was registered from — it must not have been moved.
+
+**The preview pane shows the small thumbnail, or nothing, instead of `preview.png`:**
+- Explorer may not pick up a newly registered preview handler until it restarts. Restart Explorer, then select the file again with the preview pane open (Alt+P).
+- Check that `HKEY_CLASSES_ROOT\OpenRocket\ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}` names the preview handler's CLSID. Without it, Explorer falls back to showing the thumbnail.
 
 **Some .ork files show the OpenRocket icon instead of a rocket rendering:**
 - The file does not contain a `thumbnail.png` or `preview.png` at the ZIP root (for example, it was saved by an old OpenRocket version). The handler shows the OpenRocket icon in that case. Opening and re-saving the file in a current OpenRocket version adds the images.
