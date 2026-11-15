@@ -13,6 +13,7 @@ A Windows shell extension that provides thumbnail previews for `.ork` (OpenRocke
 2. The handler opens the `.ork` file as a ZIP archive.
 3. It extracts `thumbnail.png` from the root of the archive, or `preview.png` for files saved by older OpenRocket versions that have no thumbnail.
 4. It returns the image as a bitmap, scaled to the requested thumbnail size.
+5. If the file contains neither image, or cannot be read, it returns the OpenRocket icon instead, which is embedded in the DLL.
 
 ## Project structure
 
@@ -23,6 +24,8 @@ windows-ork-preview/
 │   └── OrkThumbnailHandler/
 │       ├── OrkThumbnailHandler.csproj
 │       ├── OrkThumbnailHandler.cs      # The thumbnail provider implementation
+│       ├── Resources/
+│       │   └── icon-*.png              # OpenRocket icon, shown for files without an image
 │       └── Properties/
 │           └── AssemblyInfo.cs
 └── scripts/
@@ -179,8 +182,11 @@ If your installer handles updates by running the installer again (which is the d
 - Log off and back on, or restart Explorer.
 - Verify the DLL is in the location it was registered from — it must not have been moved.
 
-**Thumbnails show for some .ork files but not others:**
-- The file may not contain a `thumbnail.png` or `preview.png` at the ZIP root. The handler gracefully returns no thumbnail in that case.
+**Some .ork files show the OpenRocket icon instead of a rocket rendering:**
+- The file does not contain a `thumbnail.png` or `preview.png` at the ZIP root (for example, it was saved by an old OpenRocket version). The handler shows the OpenRocket icon in that case. Opening and re-saving the file in a current OpenRocket version adds the images.
+
+**Files show a blank/generic icon in Details, List or Small icons view:**
+- Those views show the file *type* icon, not the thumbnail, so this is a file association problem rather than a thumbnail handler problem. Check what Windows resolves `.ork` to; if it is `Unknown`, Windows is not using the installer's association. Right-click a `.ork` file → **Open with** → **Choose another app** → OpenRocket → **Always** fixes it for that user.
 
 **Build fails with "reference assemblies for .NETFramework,Version=v4.8 were not found":**
 - Install the [.NET Framework 4.8 Developer Pack](https://dotnet.microsoft.com/download/dotnet-framework/net48).

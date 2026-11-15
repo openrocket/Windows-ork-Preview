@@ -6,7 +6,6 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using SharpShell.Attributes;
 using SharpShell.SharpThumbnailHandler;
-using Microsoft.Win32;
 
 namespace OrkThumbnailHandler
 {
@@ -31,9 +30,11 @@ namespace OrkThumbnailHandler
         private static readonly string[] ImageEntryNames = { "thumbnail.png", "preview.png" };
 
         /// <summary>
-        /// The Windows Registry key containing a path to OpenRocket's default icon.
+        /// The sizes of the OpenRocket icon embedded in this assembly, in ascending order. The icon is shown for files
+        /// that contain no image. Each size is a copy of OpenRocket's icon-NNN.png, the same artwork as the
+        /// icon-windows.ico that the installer uses as the .ork file type icon.
         /// </summary>
-        private const string IconRegistryKey = "HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes\\OpenRocket\\DefaultIcon";
+        private static readonly int[] FallbackIconSizes = { 16, 48, 64, 128, 256 };
 
 		/// <summary>
 		/// Gets the thumbnail image for the given .ork file.
@@ -74,25 +75,46 @@ namespace OrkThumbnailHandler
                 LogError($"Error extracting thumbnail: {ex.Message}");
             }
 
-			try
-			{
-                // Display the default OpenRocket icon instead
-				string iconPath = (string)Registry.GetValue(IconRegistryKey, "", null);
-				if (iconPath == null)
-				{
-					LogError("Failed to get the default icon.");
-					return null;
-				}
+            // No image in the file (or it could not be read): show the OpenRocket icon instead.
+            try
+            {
+                return GetFallbackIcon((int)width);
+            }
+            catch (Exception ex)
+            {
+                LogError($"Unable to use the fallback icon: {ex.Message}");
+                return null;
+            }
+        }
 
-				var defaultIcon = new Bitmap(iconPath);
-				return ScaleImage(defaultIcon, (int)width);
-			}
-			catch (Exception e)
-			{
-				LogError($"Unable to use the default icon: {e.Message}");
-				return null;
-			}
-		}
+        /// <summary>
+        /// Renders the embedded OpenRocket icon at the requested size, starting from the smallest embedded size
+        /// that is at least that large so that it is only ever scaled down.
+        /// </summary>
+        private static Bitmap GetFallbackIcon(int maxSize)
+        {
+            int iconSize = FallbackIconSizes[FallbackIconSizes.Length - 1];
+            foreach (var size in FallbackIconSizes)
+            {
+                if (size >= maxSize)
+                {
+                    iconSize = size;
+                    break;
+                }
+            }
+
+            string resourceName = $"OrkThumbnailHandler.Resources.icon-{iconSize:D3}.png";
+            using (var stream = typeof(OrkThumbnailHandler).Assembly.GetManifestResourceStream(resourceName))
+            {
+                if (stream == null)
+                {
+                    throw new InvalidOperationException($"Resource {resourceName} is missing.");
+                }
+
+                // Bitmap needs its stream for its whole lifetime, so ScaleImage's copy is what gets returned.
+                return ScaleImage(new Bitmap(stream), maxSize);
+            }
+        }
 
         /// <summary>
         /// Finds the first image entry of <see cref="ImageEntryNames"/> that is present in the archive,
@@ -115,12 +137,15 @@ namespace OrkThumbnailHandler
 
         /// <summary>
         /// Scales an image to fit within the requested dimensions, preserving aspect ratio.
+        /// Takes ownership of <paramref name="original"/> and disposes it.
         /// </summary>
         private static Bitmap ScaleImage(Bitmap original, int maxSize)
         {
             if (original.Width <= maxSize && original.Height <= maxSize)
             {
-                return new Bitmap(original);
+                var copy = new Bitmap(original);
+                original.Dispose();
+                return copy;
             }
 
             double ratioX = (double)maxSize / original.Width;

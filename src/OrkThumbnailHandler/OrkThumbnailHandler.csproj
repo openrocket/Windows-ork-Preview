@@ -48,6 +48,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Copies of OpenRocket's swing/src/main/resources/pix/icon/icon-NNN.png, shown for .ork files without an image. -->
+    <EmbeddedResource Include="Resources\icon-*.png" LogicalName="OrkThumbnailHandler.Resources.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="SharpShell" Version="2.7.2" />
   </ItemGroup>
 
