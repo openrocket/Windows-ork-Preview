@@ -52,4 +52,19 @@
   </ItemGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <!-- Release builds pass /p:InformationalVersion=<OpenRocket version>, which becomes the DLL's product version. This
+       old-style project does not generate assembly attributes from MSBuild properties, so add the attribute here. -->
+  <Target Name="AddInformationalVersion" BeforeTargets="CoreCompile" Condition=" '$(InformationalVersion)' != '' ">
+    <ItemGroup>
+      <InformationalVersionAttribute Include="System.Reflection.AssemblyInformationalVersionAttribute">
+        <_Parameter1>$(InformationalVersion)</_Parameter1>
+      </InformationalVersionAttribute>
+    </ItemGroup>
+    <WriteCodeFragment Language="C#" AssemblyAttributes="@(InformationalVersionAttribute)"
+                       OutputFile="$(IntermediateOutputPath)InformationalVersion.g.cs">
+      <Output TaskParameter="OutputFile" ItemName="Compile" />
+      <Output TaskParameter="OutputFile" ItemName="FileWrites" />
+    </WriteCodeFragment>
+  </Target>
 </Project>
